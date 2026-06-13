@@ -1,14 +1,29 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
-import Layout from '@/components/HelloWorld.vue'
-const routes: Array<RouteRecordRaw> = [
-  {
-    path: '/',
-    name: 'home',
-    component: Layout
-  }
-]
+// router/index.ts
+import { createRouter, createWebHistory } from 'vue-router'
+import Login from '@/views/Login.vue'
+
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: Login
+    },
+    {
+      path: '/',
+      name: 'index',
+      component: () => import('@/views/index.vue'),
+      meta: { requiresAuth: true }
+    }
+  ]
 })
+
+// 路由守卫
+router.beforeEach((to) => {
+  const token = localStorage.getItem('token')
+  if (to.meta.requiresAuth && !token) return '/login'
+  if (to.path === '/login' && token) return '/'
+})
+
 export default router
