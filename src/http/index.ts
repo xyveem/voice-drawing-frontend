@@ -72,6 +72,10 @@ class Http {
   post<T = Result>(url: string, data?: object): Promise<T> {
     return this.instance.post(url, data)
   }
+
+  delete<T = Result>(url: string, data?: object): Promise<T> {
+    return this.instance.delete(url, { data })
+  }
 }
 
 export default new Http(config)
