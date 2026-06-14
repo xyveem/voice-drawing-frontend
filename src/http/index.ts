@@ -8,7 +8,7 @@ import { ElMessage } from 'element-plus'
 
 const config = {
   baseURL: 'http://localhost:8080', // 改成后端端口
-  timeout: 10000
+  timeout: 120000
 }
 
 export interface Result<T = unknown> {

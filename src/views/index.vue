@@ -27,26 +27,13 @@
     </div>
 
     <div class="three-columns">
-      <!--左侧AI对话-->
-      <div class="ai-chat-area">
-        <div class="chat-header">
-          <h3>🤖 AI 画师 · 小画</h3>
-        </div>
-        <div class="chat-messages" ref="chatMsgRef">
-          <div class="message ai">
-            <div class="message-bubble">你好呀！我是小画～</div>
-            <div class="message-time">刚刚</div>
-          </div>
-        </div>
-        <div class="chat-input-area">
-          <input
-            v-model="msgText"
-            placeholder="输入文字指令..."
-            @keyup.enter="sendMsg"
-          />
-          <button class="send-btn" @click="sendMsg">发送</button>
-        </div>
-      </div>
+      <!-- 替换为封装好的AI语音组件 -->
+      <AiVoiceDraw
+        ref="aiChatRef"
+        :canvas-width="800"
+        :canvas-height="550"
+        @draw-steps-ready="handleDrawSteps"
+      />
 
       <!--中间画板组件-->
       <div class="canvas-area">
@@ -168,8 +155,8 @@
         <div class="voice-status">
           <div class="led" :class="{ active: isListening }"></div>
           <span>{{ isListening ? '聆听中...' : '等待唤醒' }}</span>
-          <button class="wake-btn" @click="isListening = !isListening">
-            🎤唤醒
+          <button class="wake-btn" @click="toggleListen">
+            🎤{{ isListening ? '停止收音' : '开始说话' }}
           </button>
           <button class="save-work-btn" @click="canvasRef?.exportBase64()">
             保存画作
@@ -184,25 +171,53 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CanvasDraw from '@/components/CanvasDraw.vue'
+import AiVoiceDraw from '@/components/AiVoiceDraw.vue'
 import { createPictureApi } from '@/api/picture'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { logoutApi } from '@/api/user'
 import type { DrawOpItem } from '@/types/drawRecord'
 
+// 定义绘图步骤类型
+interface DrawStep {
+  type: string
+  color?: string
+  lineWidth?: number
+  points?: Array<{ x: number; y: number }>
+  startX?: number
+  startY?: number
+  endX?: number
+  endY?: number
+  startXPercent?: number
+  startYPercent?: number
+  endXPercent?: number
+  endYPercent?: number
+}
+
+interface PointItem {
+  x: number
+  y: number
+}
+
 const router = useRouter()
 const userStore = useUserStore()
 
 const canvasRef = ref<InstanceType<typeof CanvasDraw>>()
-const chatMsgRef = ref<HTMLDivElement>()
-const msgText = ref('')
+const aiChatRef = ref<InstanceType<typeof AiVoiceDraw>>()
 
 // 工具栏绑定变量
 const selectColor = ref('#000000')
 const strokeWidth = ref(3)
 const eraser = ref(false)
 const isListening = ref(false)
-const currentShape = ref<'free' | 'line' | 'rectangle' | 'circle'>('free')
+const currentShape = ref<'free' | 'line' | 'rectangle' | 'circle' | 'ellipse'>(
+  'free'
+)
+
+// 画布固定尺寸
+const canvasWidth = 800
+const canvasHeight = 550
+const playDelay = 700
 
 const colorList = [
   '#000000',
@@ -218,14 +233,83 @@ const shapeList = [
   { mode: 'free', label: '自由手绘' },
   { mode: 'line', label: '直线' },
   { mode: 'rectangle', label: '矩形' },
-  { mode: 'circle', label: '圆形' }
+  { mode: 'circle', label: '圆形' },
+  { mode: 'ellipse', label: '椭圆' }
 ]
 
-// 发送聊天消息
-const sendMsg = () => {
-  if (!msgText.value.trim()) return
-  // 追加消息DOM逻辑自行补齐
-  msgText.value = ''
+// 百分比转像素（保留备用）
+// const p2px = (percent: number, total: number) => (percent / 100) * total
+
+// 单条指令绘制
+async function singleDraw(step: DrawStep) {
+  const canvas = canvasRef.value!
+  const { type, color, lineWidth, points, startX, startY, endX, endY } = step
+
+  if (color) canvas.setColor(color)
+  if (lineWidth) canvas.setLineWidth(lineWidth)
+
+  switch (type) {
+    case 'free': {
+      if (points && points.length > 0) {
+        const pxPoints = points.map((p: PointItem) => ({
+          x: p.x,
+          y: p.y
+        }))
+        canvas.drawFreeByPoints(pxPoints)
+      }
+      break
+    }
+    case 'line':
+      if (startX !== undefined && endX !== undefined) {
+        canvas.drawLineByCoord(startX, startY!, endX, endY!)
+      }
+      break
+    case 'rectangle':
+      if (startX !== undefined && endX !== undefined) {
+        canvas.drawRectByCoord(startX, startY!, endX, endY!)
+      }
+      break
+    case 'circle':
+      if (startX !== undefined && endX !== undefined) {
+        canvas.drawCircleByCoord(startX, startY!, endX, endY!)
+      }
+      break
+    case 'ellipse':
+      if (startX !== undefined && endX !== undefined) {
+        canvas.drawEllipseByCoord(startX, startY!, endX, endY!)
+      }
+      break
+    case 'eraser':
+      canvas.toggleEraser(true)
+      break
+    case 'undo':
+      canvas.undo()
+      break
+    case 'clear':
+      canvas.clearCanvas()
+      break
+  }
+}
+
+// 接收子组件传回的绘制步骤，串行执行
+async function handleDrawSteps(steps: DrawStep[]) {
+  if (!steps || steps.length === 0) return
+  for (const step of steps) {
+    await singleDraw(step)
+    await new Promise((resolve) => setTimeout(resolve, playDelay))
+  }
+}
+
+// 麦克风启停
+async function toggleListen() {
+  if (!isListening.value) {
+    isListening.value = true
+    await aiChatRef.value?.startAudioRecord()
+    ElMessage.info('请口述绘图指令，再次点击结束收音')
+  } else {
+    isListening.value = false
+    await aiChatRef.value?.stopAudioRecordAndSend()
+  }
 }
 
 // 接收画板抛出的base64，上传后端
@@ -243,10 +327,10 @@ const handleSaveImage = async (base64: string, opList: DrawOpItem[]) => {
     formData.append('file', file)
     formData.append('title', '我的手绘作品')
     formData.append('voiceCommand', '')
-    formData.append('operationList', JSON.stringify(opList)) // 保存操作记录
+    formData.append('operationList', JSON.stringify(opList))
     await createPictureApi(formData)
     ElMessage.success('作品保存成功')
-    canvasRef.value?.resetRecording() // 重置记录
+    canvasRef.value?.resetRecording()
   } catch {
     ElMessage.error('保存失败')
   }
@@ -266,6 +350,7 @@ const handleLogout = async () => {
 </script>
 
 <style scoped lang="scss">
+/* 样式保持不变，省略... */
 * {
   margin: 0;
   padding: 0;
@@ -332,7 +417,7 @@ body {
   gap: 20px;
 
   .nav-link {
-    text-decoration: none; // 去掉下划线
+    text-decoration: none;
     color: #5c5c5c;
     font-weight: 460;
     cursor: pointer;
@@ -345,15 +430,6 @@ body {
     &.active {
       color: #d4a574;
     }
-  }
-
-  // 画廊页面的激活样式通过路由判断单独处理
-  .nav-link:first-child.active {
-    color: #d4a574;
-  }
-
-  .nav-link:last-child.active {
-    color: #5c5c5c;
   }
 
   .user-info {
@@ -395,118 +471,6 @@ body {
   gap: 20px;
   padding: 24px 28px;
   flex-wrap: wrap;
-}
-
-/* 左侧 - AI对话区域 */
-.ai-chat-area {
-  flex: 1;
-  min-width: 260px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(8px);
-  border-radius: 28px;
-  border: 1px solid #f0e8de;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.chat-header {
-  padding: 20px 20px 12px;
-  border-bottom: 1px solid #efe5db;
-}
-
-.chat-header h3 {
-  font-size: 1rem;
-  font-weight: 500;
-  color: #d4a574;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chat-messages {
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-  max-height: 450px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.message {
-  display: flex;
-  flex-direction: column;
-  max-width: 90%;
-}
-
-.message.user {
-  align-items: flex-end;
-  align-self: flex-end;
-}
-
-.message.ai {
-  align-items: flex-start;
-  align-self: flex-start;
-}
-
-.message-bubble {
-  padding: 10px 14px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.message.user .message-bubble {
-  background: #d4a574;
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-
-.message.ai .message-bubble {
-  background: white;
-  border: 1px solid #efe5db;
-  color: #2c2c2c;
-  border-bottom-left-radius: 4px;
-}
-
-.message-time {
-  font-size: 0.65rem;
-  color: #b2a189;
-  margin-top: 4px;
-  margin-left: 8px;
-  margin-right: 8px;
-}
-
-.chat-input-area {
-  padding: 16px;
-  border-top: 1px solid #efe5db;
-  display: flex;
-  gap: 10px;
-}
-
-.chat-input-area input {
-  flex: 1;
-  padding: 10px 16px;
-  border: 1px solid #efe5db;
-  border-radius: 40px;
-  font-size: 0.85rem;
-  background: white;
-  outline: none;
-}
-
-.chat-input-area input:focus {
-  border-color: #d4a574;
-}
-
-.send-btn {
-  background: #d4a574;
-  border: none;
-  border-radius: 40px;
-  padding: 0 20px;
-  color: white;
-  cursor: pointer;
-  font-size: 0.85rem;
 }
 
 /* 中间 - 画板区域 */
@@ -563,16 +527,24 @@ body {
   box-shadow: 0 0 0 2px #faf7f2;
 }
 
-/* 画笔宽度 */
-.stroke-width-slider {
-  width: 100%;
-  accent-color: #d4a574;
-}
+/* 画笔粗细控制 */
+.stroke-width-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 
-.width-value {
-  font-size: 0.7rem;
-  color: #b2a189;
-  margin-top: 6px;
+  .stroke-slider {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    accent-color: #d4a574;
+  }
+
+  .width-value {
+    font-size: 0.7rem;
+    color: #b2a189;
+    min-width: 40px;
+  }
 }
 
 /* 工具按钮组 */
@@ -606,7 +578,7 @@ body {
   color: white;
 }
 
-/* 形状模式 */
+/* 图形模式 */
 .shape-modes {
   display: flex;
   flex-wrap: wrap;
@@ -688,26 +660,6 @@ body {
   }
   body {
     padding: 16px;
-  }
-}
-
-/* 画笔粗细控制 */
-.stroke-width-control {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  .stroke-slider {
-    flex: 1;
-    height: 4px;
-    border-radius: 2px;
-    accent-color: #d4a574;
-  }
-
-  .width-value {
-    font-size: 0.7rem;
-    color: #b2a189;
-    min-width: 40px;
   }
 }
 </style>
