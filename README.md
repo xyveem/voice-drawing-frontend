@@ -2,6 +2,11 @@
 ## 项目介绍
 本项目是AI语音绘图工具前端页面，基于Vue3+TS开发，对接后端语音解析与绘图指令服务；现阶段已实现画布手绘、绘图轨迹回放、基础图形绘制、作品画廊浏览等功能，语音自动绘图功能正在迭代开发。
 
+## 项目演示
+手绘画板:
+通过网盘分享的文件：语音绘图.mp4
+链接: https://pan.baidu.com/s/1njhMCWsdSLpwqQPfH935-A 提取码: uyw3 复制这段内容后打开百度网盘手机App，操作更方便哦
+
 ## 技术栈
 Vue3 + TypeScript + Vite
 Element Plus + Pinia + Vue Router + Sass
