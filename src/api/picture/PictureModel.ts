@@ -13,4 +13,5 @@ export interface PictureDetailVO {
   contentBase64: string
   voiceCommand: string
   createTime: string
+  operationList?: string
 }

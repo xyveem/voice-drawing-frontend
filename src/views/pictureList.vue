@@ -4,7 +4,7 @@
     <div class="gallery-nav">
       <div class="title-section">
         <h2>时光画廊</h2>
-        <p>每一幅手绘，都是创作印记</p>
+        <p>每一幅图画，都是创作印记</p>
       </div>
       <div class="nav-buttons">
         <router-link to="/">← 画室</router-link>
@@ -43,17 +43,18 @@
     <!-- 空状态 -->
     <div class="empty-gallery" v-else>✨ 还没有画作，前往画室创作吧</div>
 
-    <!-- 详情弹窗 -->
+    <!-- 详情弹窗：左右分栏 成品 + 回放 -->
     <el-dialog
       v-model="dialogVisible"
-      title="画作详情"
-      width="60%"
+      title="画作详情 & 绘制过程回放"
+      width="80%"
       :modal="true"
       :append-to-body="true"
       class="art-detail-dialog"
       top="10vh"
     >
       <div class="dialog-content">
+        <!-- 左侧最终成品图 -->
         <div class="dialog-img">
           <img
             v-if="detailItem?.contentBase64"
@@ -61,20 +62,67 @@
             alt="画作"
           />
         </div>
-        <div class="dialog-info">
-          <h3>{{ detailItem?.title }}</h3>
-          <p class="time">📅 {{ formatTime(detailItem?.createTime) }}</p>
-          <p v-if="detailItem?.voiceCommand" class="voice">
-            🎤 语音指令：{{ detailItem.voiceCommand }}
-          </p>
+
+        <!-- 右侧回放画布 + 控制按钮 -->
+        <div>
+          <ReplayCanvas
+            ref="replayRef"
+            :op-list="opListParsed"
+            :width="800"
+            :height="600"
+            :speed="playSpeed"
+          />
+          <div
+            style="
+              margin-top: 12px;
+              display: flex;
+              gap: 10px;
+              align-items: center;
+            "
+          >
+            <el-button
+              size="small"
+              :class="{ 'active-btn': activeBtn === 'play' }"
+              @click="handlePlay"
+              >播放</el-button
+            >
+            <el-button
+              size="small"
+              :class="{ 'active-btn': activeBtn === 'pause' }"
+              @click="handlePause"
+              >暂停</el-button
+            >
+            <el-button
+              size="small"
+              :class="{ 'active-btn': activeBtn === 'reset' }"
+              @click="handleReset"
+              >重置</el-button
+            >
+            <el-select v-model="playSpeed" size="small" style="width: 100px">
+              <el-option label="0.5x" :value="0.5" />
+              <el-option label="1x" :value="1" />
+              <el-option label="2x" :value="2" />
+            </el-select>
+          </div>
         </div>
+      </div>
+
+      <div
+        class="dialog-info"
+        style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 16px"
+      >
+        <h3>{{ detailItem?.title }}</h3>
+        <p class="time">📅 {{ formatTime(detailItem?.createTime) }}</p>
+        <p v-if="detailItem?.voiceCommand" class="voice">
+          🎤 语音指令：{{ detailItem.voiceCommand }}
+        </p>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getMyPictureListApi,
@@ -82,10 +130,42 @@ import {
   deletePictureApi
 } from '@/api/picture'
 import type { PictureVO, PictureDetailVO } from '@/api/picture/PictureModel'
+import ReplayCanvas from '@/components/ReplayCanvas.vue'
 
 const list = ref<PictureVO[]>([])
 const dialogVisible = ref(false)
 const detailItem = ref<PictureDetailVO | null>(null)
+const replayRef = ref()
+const playSpeed = ref(1)
+const activeBtn = ref<'play' | 'pause' | 'reset' | null>(null)
+
+// 解析后端返回的操作序列JSON
+const opListParsed = computed(() => {
+  if (!detailItem.value?.operationList) return []
+  try {
+    return JSON.parse(detailItem.value.operationList)
+  } catch {
+    return []
+  }
+})
+
+// 处理播放
+const handlePlay = () => {
+  activeBtn.value = 'play'
+  replayRef.value?.startPlay()
+}
+
+// 处理暂停
+const handlePause = () => {
+  activeBtn.value = 'pause'
+  replayRef.value?.pausePlay()
+}
+
+// 处理重置
+const handleReset = () => {
+  activeBtn.value = 'reset'
+  replayRef.value?.resetReplay()
+}
 
 // 加载我的画作列表
 const loadList = async () => {
@@ -98,6 +178,11 @@ const openDetail = async (id: number) => {
   const res = await getPictureDetailApi(id)
   detailItem.value = res.data
   dialogVisible.value = true
+  // 每次打开重置回放，清空按钮高亮
+  nextTick(() => {
+    replayRef.value?.resetReplay()
+    activeBtn.value = null
+  })
 }
 
 // 删除画作
@@ -268,9 +353,9 @@ body {
   }
 
   .dialog-content {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
   }
 
   .dialog-img {
@@ -305,5 +390,11 @@ body {
       margin: 8px 0;
     }
   }
+}
+
+.active-btn {
+  background-color: #d4a574 !important;
+  border-color: #d4a574 !important;
+  color: white !important;
 }
 </style>
