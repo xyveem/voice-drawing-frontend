@@ -34,7 +34,9 @@ const painting = ref(false)
 const currentColor = ref('#000000')
 const lineWidth = ref(3)
 const isEraser = ref(false)
-const drawMode = ref<'free' | 'line' | 'rectangle' | 'circle'>('free')
+const drawMode = ref<'free' | 'line' | 'rectangle' | 'circle' | 'ellipse'>(
+  'free'
+)
 const startPos = ref({ x: 0, y: 0 })
 let endPos = { x: 0, y: 0 }
 
@@ -203,6 +205,14 @@ const onMouseMove = (e: MouseEvent) => {
         ctx.arc(startPos.value.x, startPos.value.y, r, 0, Math.PI * 2)
         break
       }
+      case 'ellipse': {
+        const cx = (startPos.value.x + x) / 2
+        const cy = (startPos.value.y + y) / 2
+        const rx = Math.abs(x - startPos.value.x) / 2
+        const ry = Math.abs(y - startPos.value.y) / 2
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+        break
+      }
     }
     ctx.stroke()
   }
@@ -257,6 +267,45 @@ const exportBase64 = () => {
   emit('saveImage', base64, opList.value)
 }
 
+// 坐标直接绘制，无需鼠标拖拽
+const drawFreeByPoints = (pts: Array<{ x: number; y: number }>) => {
+  ctx.beginPath()
+  ctx.moveTo(pts[0].x, pts[0].y)
+  pts.forEach((p) => ctx.lineTo(p.x, p.y))
+  ctx.stroke()
+  saveSnapshot()
+}
+const drawLineByCoord = (sx: number, sy: number, ex: number, ey: number) => {
+  ctx.beginPath()
+  ctx.moveTo(sx, sy)
+  ctx.lineTo(ex, ey)
+  ctx.stroke()
+  saveSnapshot()
+}
+const drawRectByCoord = (sx: number, sy: number, ex: number, ey: number) => {
+  ctx.beginPath()
+  ctx.rect(sx, sy, ex - sx, ey - sy)
+  ctx.stroke()
+  saveSnapshot()
+}
+const drawCircleByCoord = (sx: number, sy: number, ex: number, ey: number) => {
+  const r = Math.hypot(ex - sx, ey - sy)
+  ctx.beginPath()
+  ctx.arc(sx, sy, r, 0, Math.PI * 2)
+  ctx.stroke()
+  saveSnapshot()
+}
+const drawEllipseByCoord = (sx: number, sy: number, ex: number, ey: number) => {
+  ctx.beginPath()
+  const cx = (sx + ex) / 2
+  const cy = (sy + ey) / 2
+  const rx = Math.abs(ex - sx) / 2
+  const ry = Math.abs(ey - sy) / 2
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  saveSnapshot()
+}
+
 // 初始化
 onMounted(() => {
   ctx = canvasRef.value!.getContext('2d')!
@@ -276,8 +325,13 @@ defineExpose({
   setDrawMode,
   exportBase64,
   isCanvasEmpty,
-  getOpList,
-  resetRecording
+  resetRecording,
+
+  drawFreeByPoints,
+  drawLineByCoord,
+  drawRectByCoord,
+  drawCircleByCoord,
+  drawEllipseByCoord
 })
 </script>
 
