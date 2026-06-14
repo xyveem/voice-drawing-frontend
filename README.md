@@ -1,5 +1,19 @@
-# Vue 3 + TypeScript + Vite
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+## 项目介绍
+本项目是AI语音绘图工具前端页面，基于Vue3+TS开发，对接后端语音解析与绘图指令服务；现阶段已实现画布手绘、绘图轨迹回放、基础图形绘制、作品画廊浏览等功能，语音自动绘图功能正在迭代开发。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 技术栈
+Vue3 + TypeScript + Vite
+Element Plus + Pinia + Vue Router + Sass
+Axios（接口请求）
+ESLint + Prettier + Husky（代码规范校验）
+
+## 已实现功能
+1. 画布操作：自由手绘、橡皮擦、清空画布、撤销/重做；支持线条颜色、粗细自定义
+2. 基础图形手动绘制：直线、矩形、圆形
+4. 作品管理：画廊页面浏览历史绘图作品，完整复现手绘轨迹，回看作画全过程
+5. 语音对话面板：支持手动输入文本问答，展示 AI 回复文字；接收后端 TTS 合成音频，前端播放语音播报回复内容
+
+## 待开发功能
+1. 语音快捷操控：语音触发清空、撤销、切换绘图工具、保存画作等操作，脱离键鼠操作
+
