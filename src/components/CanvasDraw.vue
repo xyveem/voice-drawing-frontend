@@ -13,7 +13,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted } from 'vue'
+import { DrawOpType, type DrawOpItem, type Point } from '@/types/drawRecord'
 
 const props = defineProps<{
   canvasWidth: number
@@ -22,7 +23,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  saveImage: [base64: string]
+  saveImage: [base64: string, opList: DrawOpItem[]]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -35,10 +36,38 @@ const lineWidth = ref(3)
 const isEraser = ref(false)
 const drawMode = ref<'free' | 'line' | 'rectangle' | 'circle'>('free')
 const startPos = ref({ x: 0, y: 0 })
+let endPos = { x: 0, y: 0 }
 
 // 撤销重做栈
 const undoStack: ImageData[] = []
 const redoStack: ImageData[] = []
+
+// 操作记录
+const opList = ref<DrawOpItem[]>([])
+let recordStartTime = 0
+let currentPoints: Point[] = []
+let hasStarted = false // 标记是否已经开始录制
+
+// 开始录制（第一次下笔时调用）
+const startRecording = () => {
+  if (hasStarted) return
+  hasStarted = true
+  opList.value = []
+  recordStartTime = Date.now()
+  currentPoints = []
+  console.log('开始录制绘画过程')
+}
+
+// 记录操作
+const recordOp = (op: Omit<DrawOpItem, 'time'>) => {
+  if (!hasStarted) return
+  const now = Date.now()
+  const relativeTime = recordStartTime === 0 ? 0 : now - recordStartTime
+  opList.value.push({
+    ...op,
+    time: relativeTime
+  })
+}
 
 // 保存画布快照
 const saveSnapshot = () => {
@@ -95,9 +124,25 @@ const setDrawMode = (mode: typeof drawMode.value) => {
   drawMode.value = mode
 }
 
+// 获取操作列表
+const getOpList = () => opList.value
+
+// 重置录制（保存成功后调用）
+const resetRecording = () => {
+  opList.value = []
+  recordStartTime = 0
+  currentPoints = []
+  hasStarted = false
+  console.log('重置录制')
+}
+
 // 鼠标按下
 const onMouseDown = (e: MouseEvent) => {
   if (!canvasRef.value || !ctx) return
+
+  // 第一次下笔时开始录制
+  startRecording()
+
   const rect = canvasRef.value.getBoundingClientRect()
   const scaleX = props.canvasWidth / rect.width
   const scaleY = props.canvasHeight / rect.height
@@ -105,6 +150,8 @@ const onMouseDown = (e: MouseEvent) => {
   startPos.value.y = (e.clientY - rect.top) * scaleY
 
   painting.value = true
+  currentPoints = [{ x: startPos.value.x, y: startPos.value.y }]
+
   if (drawMode.value === 'free') {
     ctx.beginPath()
     ctx.moveTo(startPos.value.x, startPos.value.y)
@@ -121,6 +168,7 @@ const onMouseMove = (e: MouseEvent) => {
   const scaleY = props.canvasHeight / rect.height
   const x = (e.clientX - rect.left) * scaleX
   const y = (e.clientY - rect.top) * scaleY
+  endPos = { x, y }
 
   ctx.strokeStyle = isEraser.value ? '#fff' : currentColor.value
   ctx.lineWidth = lineWidth.value
@@ -130,6 +178,7 @@ const onMouseMove = (e: MouseEvent) => {
     ctx.stroke()
     ctx.beginPath()
     ctx.moveTo(x, y)
+    currentPoints.push({ x, y })
   } else {
     // 先恢复上一步画布
     if (undoStack.length) ctx.putImageData(undoStack.at(-1)!, 0, 0)
@@ -163,16 +212,37 @@ const onMouseMove = (e: MouseEvent) => {
 const onMouseUp = () => {
   if (!painting.value || !ctx) return
   painting.value = false
+
+  // 记录操作
+  if (drawMode.value === 'free' && currentPoints.length > 1) {
+    recordOp({
+      type: DrawOpType.FREE,
+      color: isEraser.value ? '#ffffff' : currentColor.value,
+      lineWidth: lineWidth.value,
+      points: [...currentPoints]
+    })
+  } else if (drawMode.value !== 'free') {
+    recordOp({
+      type: drawMode.value as DrawOpType,
+      color: isEraser.value ? '#ffffff' : currentColor.value,
+      lineWidth: lineWidth.value,
+      startX: startPos.value.x,
+      startY: startPos.value.y,
+      endX: endPos.x,
+      endY: endPos.y
+    })
+  }
+
   saveSnapshot()
+  currentPoints = []
 }
 
+// 判断画布是否为空
 const isCanvasEmpty = () => {
   if (!ctx || !canvasRef.value) return true
   const imgData = ctx.getImageData(0, 0, props.canvasWidth, props.canvasHeight)
   const data = imgData.data
-  // 遍历像素，只要有一个像素不是纯白，说明画了内容
   for (let i = 0; i < data.length; i += 4) {
-    // R G B 全255=纯白
     if (data[i] !== 255 || data[i + 1] !== 255 || data[i + 2] !== 255) {
       return false
     }
@@ -184,9 +254,10 @@ const isCanvasEmpty = () => {
 const exportBase64 = () => {
   if (!canvasRef.value) return
   const base64 = canvasRef.value.toDataURL('image/png')
-  emit('saveImage', base64)
+  emit('saveImage', base64, opList.value)
 }
 
+// 初始化
 onMounted(() => {
   ctx = canvasRef.value!.getContext('2d')!
   ctx.fillStyle = '#fff'
@@ -194,7 +265,7 @@ onMounted(() => {
   saveSnapshot()
 })
 
-// 向外暴露方法给父组件调用
+// 向外暴露方法
 defineExpose({
   undo,
   redo,
@@ -204,7 +275,9 @@ defineExpose({
   setLineWidth,
   setDrawMode,
   exportBase64,
-  isCanvasEmpty
+  isCanvasEmpty,
+  getOpList,
+  resetRecording
 })
 </script>
 

@@ -188,6 +188,7 @@ import { createPictureApi } from '@/api/picture'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { logoutApi } from '@/api/user'
+import type { DrawOpItem } from '@/types/drawRecord'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -228,8 +229,7 @@ const sendMsg = () => {
 }
 
 // 接收画板抛出的base64，上传后端
-const handleSaveImage = async (base64: string) => {
-  // 调用组件方法真实判断画布空白
+const handleSaveImage = async (base64: string, opList: DrawOpItem[]) => {
   const empty = canvasRef.value?.isCanvasEmpty()
   if (empty) {
     ElMessage.warning('画布为空，无法保存')
@@ -243,8 +243,10 @@ const handleSaveImage = async (base64: string) => {
     formData.append('file', file)
     formData.append('title', '我的手绘作品')
     formData.append('voiceCommand', '')
+    formData.append('operationList', JSON.stringify(opList)) // 保存操作记录
     await createPictureApi(formData)
     ElMessage.success('作品保存成功')
+    canvasRef.value?.resetRecording() // 重置记录
   } catch {
     ElMessage.error('保存失败')
   }
